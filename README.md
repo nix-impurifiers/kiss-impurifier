@@ -43,9 +43,16 @@ supply native host dependency names. No particular KISS init choice is assumed.
 `buildPackage` accepts a raw payload and dependency names without automatic
 application activation.
 
+`makeRepository { packages = [ artifact ]; }` emits native build recipes that
+repack the Nix artifact. Keep the output in the Nix store and root it while
+building: recipes retain artifact references. Set `KISS_PATH` to that output and
+run `kiss build name`. Choose one version/flavor per name. Compilation stays in
+Nix, and actual kiss owns the native package construction. Copying recipes out
+of the Nix store does not make their referenced payloads portable.
+
 `nix flake check -L` boots QEMU and executes pinned upstream kiss-community KISS
 6.2.0. It tests native dependency rejection, net failure/offline recovery,
 configuration preservation, batch activation, service/account lifecycle and
 admin intent, unrelated native driver updates, foreign-root safety, removal and
 GC. The guest kernel and outer init are NixOS; Nix is preinstalled. This is not
-a complete KISS boot or a source-repository build test.
+a complete KISS boot test. It also exercises native recipe construction.

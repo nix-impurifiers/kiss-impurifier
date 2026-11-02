@@ -152,6 +152,11 @@ pkgs.testers.runNixOSTest {
       }
     }/*.tar.gz ${impurifier.runtimePackage}/*.tar.gz")
     machine.fail("test -e ${builtins.unsafeDiscardStringContext (toString (tool "1"))}")
+    with subtest("native source recipe builds the prebuilt Nix transport"):
+        machine.succeed(env + "KISS_PATH=${
+          impurifier.makeRepository { packages = [ (app true "1") ]; }
+        } KISS_STRIP=0 kiss build kiss-tool")
+        machine.succeed("cp /root/.cache/kiss/bin/kiss-tool@1-1_offline.tar.gz /tmp/packages/")
     with subtest("native script failure preserves the published profile"):
         before = machine.succeed("readlink /opt/nix/profile").strip()
         code, output = machine.execute(install + "/tmp/packages/kiss-tool@1-*_net.tar.gz 2>&1")

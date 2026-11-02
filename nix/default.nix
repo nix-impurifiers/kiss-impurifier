@@ -73,6 +73,7 @@ let
         ];
         __structuredAttrs = true;
         unsafeDiscardReferences.out = true;
+        passthru.nativeName = name;
         passthru.filename = "${name}@${version}-${release}.tar.gz";
       }
       ''
@@ -154,6 +155,35 @@ let
       '';
       postInstall = "/usr/sbin/nix-profile-engine reconcile";
     };
+  makeRepository =
+    { packages }:
+    assert lib.assertMsg (
+      lib.length (lib.unique (map (p: p.nativeName) packages)) == lib.length packages
+    ) "choose one version/flavor per native repository name";
+    pkgs.runCommand "kiss-impurifier-repository"
+      {
+        nativeBuildInputs = [
+          pkgs.gnutar
+          pkgs.gzip
+        ];
+      }
+      ''
+        mkdir -p $out
+        ${lib.concatMapStringsSep "\n" (package: ''
+          mkdir -p $out/${package.nativeName}
+          for field in version depends; do
+            tar -xOzf ${package}/${lib.escapeShellArg package.filename} ./var/db/kiss/installed/${package.nativeName}/$field > $out/${package.nativeName}/$field
+          done
+          cat > $out/${package.nativeName}/build <<'SCRIPT'
+          #!/bin/sh
+          # SPDX-License-Identifier: MIT
+          set -eu
+          tar -xzf ${package}/${lib.escapeShellArg package.filename} -C "$1"
+          SCRIPT
+          chmod 755 $out/${package.nativeName}/build
+        '') packages}
+      '';
+
 in
 {
   inherit (core)
@@ -162,7 +192,12 @@ in
     unit
     runtimeVersion
     ;
-  inherit buildPackage makePackage makeRuntimePackage;
+  inherit
+    buildPackage
+    makePackage
+    makeRuntimePackage
+    makeRepository
+    ;
   runtimePackage = makeRuntimePackage { };
   makeNetPackage = args: makePackage (args // { offline = false; });
   makeOfflinePackage = args: makePackage (args // { offline = true; });
