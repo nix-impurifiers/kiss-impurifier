@@ -109,13 +109,20 @@ let
         if [ -d root/etc ]; then touch "$database/etcsums"; fi
         python3 - <<'PYTHON'
         from pathlib import Path
+        import subprocess
         root = Path('root')
         entries = ['/' + str(p.relative_to(root)) + ('/' if p.is_dir() and not p.is_symlink() else "") for p in root.rglob('*')]
-        (root / 'var/db/kiss/installed/${name}/manifest').write_text('\n'.join(sorted(entries, reverse=True)) + '\n')
+        entries.sort(reverse=True)
+        (root / 'var/db/kiss/installed/${name}/manifest').write_text('\n'.join(entries) + '\n')
+        if (root / 'etc').is_dir():
+            sums = []
+            for entry in entries:
+                if entry.startswith('/etc/') and not entry.endswith('/'):
+                    path = root / entry.lstrip('/')
+                    target = '/dev/null' if path.is_symlink() else str(path)
+                    sums.append(subprocess.check_output(['b3sum', '-l', '33', target], text=True).split()[0])
+            (root / 'var/db/kiss/installed/${name}/etcsums').write_text('\n'.join(sums) + ('\n' if sums else ""))
         PYTHON
-        if [ -d root/etc ]; then
-          (cd root; find etc -type f -exec b3sum {} + | sed 's,  etc/,  /etc/,') > "$database/etcsums"
-        fi
         tar -C root --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner -czf $out/${name}@${version}-${release}.tar.gz .
       '';
   makePackage =
@@ -143,19 +150,18 @@ let
     };
   makeRuntimePackage =
     {
-      nixDependency ? "nix",
+      bundledNixStore ? null,
+      bundledNixNotices ? [ ],
+      nixDependency ? (if bundledNixStore == null then "nix" else null),
       pythonDependency ? "python3",
     }:
     buildPackage {
       name = "kiss-impurifier";
       version = core.runtimeVersion;
-      dependencies = [
-        nixDependency
-        pythonDependency
-      ];
+      dependencies = lib.optional (nixDependency != null) nixDependency ++ [ pythonDependency ];
       payload = pkgs.runCommand "kiss-impurifier-runtime-payload" { } ''
         mkdir -p $out
-        cp -r ${core.makeRuntimeTree { }}/. $out/
+        cp -r ${core.makeRuntimeTree { inherit bundledNixStore bundledNixNotices; }}/. $out/
         chmod -R u+w $out
         install -Dm755 ${hook} $out/usr/sbin/kiss-impurifier-hook
         install -Dm755 ${wrapper} $out/usr/sbin/kiss-impurifier
@@ -207,6 +213,7 @@ in
     makeRuntimePackage
     makeRepository
     ;
+  makeNativePackage = args: buildPackage args;
   runtimePackage = makeRuntimePackage { };
   makeNetPackage = args: makePackage (args // { offline = false; });
   makeOfflinePackage = args: makePackage (args // { offline = true; });

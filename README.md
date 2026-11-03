@@ -56,3 +56,20 @@ configuration preservation, batch activation, service/account lifecycle and
 admin intent, unrelated native driver updates, foreign-root safety, removal and
 GC. The guest kernel and outer init are NixOS; Nix is preinstalled. This is not
 a complete KISS boot test. It also exercises native recipe construction.
+
+## Native payloads and optional bundled clients
+
+`makeNativePackage { name; version; payload; release?; dependencies?; }` emits
+a native KISS archive from a producer-prepared tree. It adds no engine callbacks
+or runtime requirement. Install it with ordinary `kiss`, without the impurifier
+wrapper or global engine hook. Native dependency inventory and configuration
+checksums remain available. The producer must prepare a runnable target layout;
+this does not relocate binaries. The native VM executes a static payload in a
+target root without `/nix`, then upgrades and removes it.
+
+`makeRuntimePackage` accepts `bundledNixStore` and `bundledNixNotices`. Supply a
+static ELF client and upstream notices. This omits the default Nix dependency;
+Python remains required. Compatible external clients take precedence. Explicit
+`IMPURIFIER_NIX_STORE` disables fallback; failed mutations are never retried
+through another client. A separate bundled-client VM repeats the lifecycle
+suite with an incompatible external candidate. Nix provisioning remains deferred.
